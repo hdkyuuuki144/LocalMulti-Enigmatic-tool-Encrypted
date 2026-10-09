@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>多機能暗号 & 変換ツール</title>
+  <style>
+    body {
+      font-family: monospace, sans-serif;
+      background-color: #1a1a1a;
+      color: #00ffcc;
+      padding: 20px;
+    }
+    .box {
+      border: 1px solid #333;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      background-color: #252525;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #00ffcc;
+    }
+    input, textarea, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      background: #111;
+      border: 1px solid #444;
+      color: #fff;
+      font-size: 15px;
+      box-sizing: border-box;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    button {
+      background: #00ffcc;
+      color: #111;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      transition: 0.2s;
+    }
+    button:hover { background: #00cca3; }
+    button:disabled { background: #444; color: #888; cursor: not-allowed; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #00ffcc; }
+    
+    .switch-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 15px;
+      margin-bottom: 15px;
+    }
+    .switch {
+      position: relative; display: inline-block; width: 50px; height: 24px;
+    }
+    .switch input { display: none; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #444; transition: .4s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 16px; width: 16px;
+      left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: #00ffcc; }
+    input:checked + .slider:before { transform: translateX(26px); }
+    .status-text { font-size: 14px; font-weight: bold; color: #aaa; }
+    .status-text.active { color: #00ffcc; }
+  </style>
+</head>
+<body>
+
+  <h1>多機能暗号 & 変換ツール (超非公式NATO暗号対応版)</h1>
+
+  <!-- 1. 相互進数変換 -->
+  <div class="box">
+    <h2>1. リアルタイム相互進数変換</h2>
+    <div class="grid">
+      <div>
+        <label>テキスト (Unicode/ASCII):</label>
+        <input type="text" id="textInput" placeholder="例: Hello 馬力の強い馬" oninput="fromText()">
+      </div>
+      <div>
+        <label>10進数 (Decimal):</label>
+        <input type="text" id="decInput" placeholder="例: 255" oninput="fromDec()">
+      </div>
+      <div>
+        <label>2進数 (Binary):</label>
+        <input type="text" id="binInput" placeholder="例: 11111111" oninput="fromBin()">
+      </div>
+      <div>
+        <label>16進数 (Hex):</label>
+        <input type="text" id="hexInput" placeholder="例: B2FA5" oninput="fromHex()">
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 独自暗号化 (多フォーマット出力対応) -->
+  <div class="box">
+    <h2>2. 独自鍵暗号 (共通鍵 + 動的定型ワード)</h2>
+    
+    <div class="grid">
+      <div>
+        <label>暗号キー (Passphrase):</label>
+        <input type="text" id="cipherKey" placeholder="秘密の鍵を入力..." oninput="updateCipher()">
+      </div>
+      <div>
+        <div class="switch-container">
+          <label class="switch">
+            <input type="checkbox" id="sigToggle" onchange="toggleSignature()">
+            <span class="slider"></span>
+          </label>
+          <span id="sigStatus" class="status-text">定型ワードルール: OFF</span>
+        </div>
+        <input type="text" id="sigWord" placeholder="定型ワード" value="Heil BlueArchive" disabled oninput="updateCipher()">
+      </div>
+    </div>
+
+    <div style="margin-top: 10px;">
+      <label>暗号文出力フォーマット:</label>
+      <select id="cipherMode" onchange="updateCipher()">
+        <option value="hex">16進数 (Hex)</option>
+        <option value="bin">2進数 (Binary)</option>
+        <option value="dec">10進数 (Decimal)</option>
+        <option value="base64">Base64</option>
+      </select>
+    </div>
+
+    <div class="grid" style="margin-top: 15px;">
+      <div>
+        <label>平文 (暗号化したいテキスト):</label>
+        <textarea id="plainText" rows="4" placeholder="ここにテキストを入力..." oninput="encryptText()"></textarea>
+      </div>
+      <div>
+        <label>暗号文:</label>
+        <textarea id="cipherText" rows="4" placeholder="暗号文を入力すると復号されます..." oninput="decryptText()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. UNOFFICIAL NATO ANGOU -->
+  <div class="box">
+    <h2>3. UNOFFICIAL NATO ANGOU 変換 (安全性を高めたい場合、独自鍵暗号との二重掛けを推奨)</h2>
+    
+    <!-- ショートカットボタンエリア -->
+    <div style="margin-bottom: 10px;">
+      <label style="margin-bottom: 5px;">クイック入力ショートカット:</label>
+      <div style="display: flex; flex-wrap: wrap; gap: 5px;" id="shortcutContainer">
+        <!-- JSでボタンが自動生成されるよ -->
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <label>平文 (日本語・記号・キーワード):</label>
+        <textarea id="natoText" rows="4" placeholder="例: あ い う 戦艦 日本" oninput="textToNato()"></textarea>
+      </div>
+      <div>
+        <label>NATO暗号コード:</label>
+        <textarea id="natoCode" rows="4" placeholder="例: 10_4 10_5 10_6 FO_5 FO_6" oninput="natoToText()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. モールス信号 -->
+  <div class="box">
+    <h2>4. モールス信号変換 & オーディオ再生</h2>
+    <div class="grid">
+      <div>
+        <label>テキスト (英数・カタカナ):</label>
+        <textarea id="morseText" rows="3" placeholder="例: SOS または サル" oninput="textToMorse()"></textarea>
+      </div>
+      <div>
+        <label>モールス信号 (. と -):</label>
+        <textarea id="morseCode" rows="3" placeholder="例: ... --- ..." oninput="morseToText()"></textarea>
+      </div>
+    </div>
+    <div style="margin-top: 15px; display: flex; gap: 10px;">
+      <button id="playBtn" onclick="playMorse()">🔊 モールス音声を再生</button>
+      <button id="stopBtn" onclick="stopMorse()" disabled style="background:#ff4444; color:#fff;">⏹ 停止</button>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. 進数変換 ---
+    const textEl = document.getElementById('textInput');
+    const decEl  = document.getElementById('decInput');
+    const binEl  = document.getElementById('binInput');
+    const hexEl  = document.getElementById('hexInput');
+
+    function fromText() {
+      const str = textEl.value;
+      if (!str) { clearAllExcept('text'); return; }
+      const decs = [], bins = [], hexs = [];
+      for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        decs.push(code.toString(10));
+        bins.push(code.toString(2).padStart(code > 255 ? 16 : 8, '0'));
+        hexs.push(code.toString(16).toUpperCase().padStart(code > 255 ? 4 : 2, '0'));
+      }
+      decEl.value = decs.join(' '); binEl.value = bins.join(' '); hexEl.value = hexs.join(' ');
+    }
+
+    function fromDec() {
+      const val = decEl.value.trim();
+      if (!val) { clearAllExcept('dec'); return; }
+      const tokens = val.split(/\s+/);
+      const chars = [], bins = [], hexs = [];
+      for (let t of tokens) {
+        const num = parseInt(t, 10);
+        if (!isNaN(num)) {
+          chars.push(String.fromCharCode(num));
+          bins.push(num.toString(2).padStart(num > 255 ? 16 : 8, '0'));
+          hexs.push(num.toString(16).toUpperCase().padStart(num > 255 ? 4 : 2, '0'));
+        }
+      }
+      binEl.value = bins.join(' '); hexEl.value = hexs.join(' '); textEl.value = chars.join('');
+    }
+
+    function fromBin() {
+      const val = binEl.value.trim();
+      if (!val) { clearAllExcept('bin'); return; }
+      const tokens = val.split(/\s+/);
+      const chars = [], decs = [], hexs = [];
+      for (let t of tokens) {
+        const num = parseInt(t, 2);
+        if (!isNaN(num)) {
+          chars.push(String.fromCharCode(num));
+          decs.push(num.toString(10));
+          hexs.push(num.toString(16).toUpperCase().padStart(num > 255 ? 4 : 2, '0'));
+        }
+      }
+      decEl.value = decs.join(' '); hexEl.value = hexs.join(' '); textEl.value = chars.join('');
+    }
+
+    function fromHex() {
+      const val = hexEl.value.trim();
+      if (!val) { clearAllExcept('hex'); return; }
+      const tokens = val.split(/\s+/);
+      const chars = [], decs = [], bins = [];
+      for (let t of tokens) {
+        const num = parseInt(t, 16);
+        if (!isNaN(num)) {
+          chars.push(String.fromCharCode(num));
+          decs.push(num.toString(10));
+          bins.push(num.toString(2).padStart(num > 255 ? 16 : 8, '0'));
+        }
+      }
+      decEl.value = decs.join(' '); binEl.value = bins.join(' '); textEl.value = chars.join('');
+    }
+
+    function clearAllExcept(activeInput) {
+      if (activeInput !== 'text') textEl.value = '';
+      if (activeInput !== 'dec')  decEl.value  = '';
+      if (activeInput !== 'bin')  binEl.value  = '';
+      if (activeInput !== 'hex')  hexEl.value  = '';
+    }
+
+    // --- 2. 独自暗号ロジック ---
+    const cipherKeyEl = document.getElementById('cipherKey');
+    const sigToggleEl = document.getElementById('sigToggle');
+    const sigWordEl   = document.getElementById('sigWord');
+    const sigStatusEl = document.getElementById('sigStatus');
+    const cipherModeEl = document.getElementById('cipherMode');
+    const plainTextEl = document.getElementById('plainText');
+    const cipherTextEl = document.getElementById('cipherText');
+
+    function toggleSignature() {
+      const isON = sigToggleEl.checked;
+      sigWordEl.disabled = !isON;
+      sigStatusEl.innerText = isON ? "定型ワードルール: ON (有効)" : "定型ワードルール: OFF";
+      sigStatusEl.className = isON ? "status-text active" : "status-text";
+      updateCipher();
+    }
+
+    function generateSeedKey() {
+      const baseKey = cipherKeyEl.value || "DEFAULT_KEY";
+      let keySeed = 0;
+      for (let i = 0; i < baseKey.length; i++) {
+        keySeed = (keySeed + baseKey.charCodeAt(i) * (i + 1)) % 65536;
+      }
+      if (sigToggleEl.checked && sigWordEl.value) {
+        const sig = sigWordEl.value;
+        let sigSeed = 0;
+        for (let i = 0; i < sig.length; i++) {
+          sigSeed = (sigSeed * 31 + sig.charCodeAt(i)) % 65536;
+        }
+        keySeed = (keySeed ^ sigSeed) + sig.length;
+      }
+      return keySeed;
+    }
+
+    function encryptText() {
+      const text = plainTextEl.value;
+      if (!text) { cipherTextEl.value = ''; return; }
+      const seed = generateSeedKey();
+      const codeList = [];
+      for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        const shiftedKey = (seed + i * 7) % 256;
+        codeList.push(code ^ shiftedKey);
+      }
+
+      const mode = cipherModeEl.value;
+      if (mode === 'hex') {
+        cipherTextEl.value = codeList.map(c => c.toString(16).toUpperCase().padStart(4, '0')).join(' ');
+      } else if (mode === 'bin') {
+        cipherTextEl.value = codeList.map(c => c.toString(2).padStart(16, '0')).join(' ');
+      } else if (mode === 'dec') {
+        cipherTextEl.value = codeList.join(' ');
+      } else if (mode === 'base64') {
+        const str = codeList.map(c => String.fromCharCode(c)).join('');
+        try { cipherTextEl.value = btoa(unescape(encodeURIComponent(str))); } catch(e) { cipherTextEl.value = ''; }
+      }
+    }
+
+    function decryptText() {
+      const rawInput = cipherTextEl.value.trim();
+      if (!rawInput) { plainTextEl.value = ''; return; }
+      const mode = cipherModeEl.value;
+      const seed = generateSeedKey();
+      let codeList = [];
+
+      try {
+        if (mode === 'hex' || mode === 'bin' || mode === 'dec') {
+          const tokens = rawInput.split(/\s+/);
+          const radix = mode === 'hex' ? 16 : (mode === 'bin' ? 2 : 10);
+          codeList = tokens.map(t => parseInt(t, radix)).filter(n => !isNaN(n));
+        } else if (mode === 'base64') {
+          const decodedStr = decodeURIComponent(escape(atob(rawInput)));
+          for (let i = 0; i < decodedStr.length; i++) {
+            codeList.push(decodedStr.charCodeAt(i));
+          }
+        }
+      } catch (e) { plainTextEl.value = '復号エラー'; return; }
+
+      const chars = [];
+      for (let i = 0; i < codeList.length; i++) {
+        const shiftedKey = (seed + i * 7) % 256;
+        chars.push(String.fromCharCode(codeList[i] ^ shiftedKey));
+      }
+      plainTextEl.value = chars.join('');
+    }
+
+    function updateCipher() {
+      if (plainTextEl.value) encryptText();
+      else if (cipherTextEl.value) decryptText();
+    }
+
+       // --- 3. UNOFFICIAL NATO ANGOU テーブルマッピング ---
+    const natoTable = {
+      'ON': ['ON', '15', 'EW', '9E', '3R', 'P2', 'K3', '87'],
+      '10': ['A', 'Km', '+', 'あ', 'い', 'う', 'え', 'お'],
+      '20': ['B', 'M', '', 'か', 'き', '<', 'け', 'こ'],
+      '30': ['C', '/s', '', 'さ', 'し', 'す', 'せ', 'そ'],
+      '40': ['D', '/h', '÷', 'た', 'ち', 'つ', 'て', 'と'],
+      '50': ['E', '/m', '/ms', 'な', 'に', 'ぬ', 'ね', 'の'],
+      '60': ['F', 'Null', 'error', 'は', 'ひ', 'ふ', 'V', 'ほ'],
+      '70': ['G', '必要', 'ヤクザ', 'ま', 'み', 'む', 'め', 'も'],
+      '80': ['H', 'VHF', 'Space', 'や', 'ゆ', 'よ', '半濁', '濁'],
+      '90': ['', 'FM', 'AM', 'ら', 'り', 'る', 'れ', '3'],
+      'A0': ['J', '喰い', '光よ!', 'わ', 'を', 'ん', '小化', 'シャバ'],
+      'B0': ['K', '輸送機', 'ヘリ', 'テラ', 'トン', '1', '2', '3'],
+      'C0': ['L', '戦闘機', '爆撃機', 'ギガ', 'キロ', '4', '5', '6'],
+      'DO': ['ブルアカ', '逃げろ', 'メガ', '7', '重巡', '中国', '奇襲', '増援'],
+      'EO': ['なんて?', 'Base64', '肯定', '8', '空母', '米国', '偵察', '警戒'],
+      'FO': ['捕食だ', '潜水', '駆逐', '0', '戦艦', '日本', '散開', '集結'],
+      'GO': ['UTF8', '潜空母', '露', '9', '空襲', '撤退', '突入', ''],
+      'HO': ['敗走', '原潜', '風速', '#', '', '', '', ''],
+      'NO': ['OUT', '核兵器', '気温', '', '', '', '', ''],
+      'LO': ['救護', '発見', '湿度', '', '', '', '', ''],
+      'BD': ['T', 'U', 'V', 'W', 'X', 'Y', 'Z', '&'],
+      'RC': ['JR', '万歳', '火力', '速度', '低下', '弾薬', '補給', 'イージス'],
+      'E5': ['ANA', '天皇', '戦力', '機関', '増加', '燃料', '切', '報告'],
+      'E6': ['空自', '誉死亡', '兵長', '曹長', '中尉', '中佐', '少将', '制圧'],
+      'E7': ['海自', '要求', '伍長', '准尉', '大尉', '大佐', '勝訴', '敗訴'],
+      'N7': ['陸自', 'OVER', '軍曹', '少尉', '少佐', '准将', 'ムショ', 'シャブ']
+    };
+
+    // 順引き・逆引きマップ構築（アンダーバー無しフォーマット）
+    const natoToCharMap = {};
+    const charToNatoMap = {};
+
+    Object.keys(natoTable).forEach(header => {
+      const row = natoTable[header];
+      row.forEach((val, idx) => {
+        if (val) {
+          const code = `${header}${idx + 1}`; // アンダーバーを排除 (例: E72)
+          natoToCharMap[code] = val;
+          if (!charToNatoMap[val]) charToNatoMap[val] = code;
+        }
+      });
+    });
+
+    function textToNato() {
+      const text = document.getElementById('natoText').value.trim();
+      if (!text) { document.getElementById('natoCode').value = ''; return; }
+
+      const keys = Object.keys(charToNatoMap).sort((a, b) => b.length - a.length);
+      let tempText = text;
+      const resultCodes = [];
+
+      let i = 0;
+      while (i < tempText.length) {
+        let matched = false;
+        for (let key of keys) {
+          if (tempText.startsWith(key, i)) {
+            resultCodes.push(charToNatoMap[key]);
+            i += key.length;
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          resultCodes.push(tempText[i]);
+          i++;
+        }
+      }
+      document.getElementById('natoCode').value = resultCodes.join(' ');
+    }
+
+    function natoToText() {
+      const codeStr = document.getElementById('natoCode').value.trim();
+      if (!codeStr) { document.getElementById('natoText').value = ''; return; }
+
+      const tokens = codeStr.split(/\s+/);
+      const resultText = tokens.map(t => natoToCharMap[t] || t).join('');
+      document.getElementById('natoText').value = resultText;
+    }
+
+
+    // --- NATO暗号用 ショートカットボタン制御 (PDF全特殊ワード・用語完全網羅版) ---
+    const shortcuts = [
+      // 特殊・ミーム・通信用語
+      'ブルアカ', '光よ!', 'なんて?', '捕食だ', '喰い', 'シャバ', 'ヤクザ', '誉死亡', 'ムショ', 'シャブ',
+      'UTF8', 'Base64', 'Null', 'error', 'Space', 'VHF', 'FM', 'AM', 'OVER', 'OUT',
+      '/s', '/h', '/m', '/ms',
+      
+      // 艦船・航空機・兵器
+      '戦艦', '空母', '重巡', '軽巡', '駆逐', '潜水', '潜空母', '原潜', '核兵器',
+      '戦闘機', '爆撃機', '輸送機', 'ヘリ', 'イージス',
+      
+      // 国名・組織
+      '日本', '米国', '中国', '露', '韓国', '海自', '陸自', '空自', 'ANA', 'JR',
+      
+      // 階級・役職
+      '少将', '准将', '大佐', '中佐', '少佐', '大尉', '中尉', '少尉', '准尉', 
+      '曹長', '軍曹', '伍長', '兵長', '天皇',
+      
+      // 戦況・作戦・指示
+      '発見', '警戒', '奇襲', '増援', '空襲', '撤退', '集結', '散開', '突入',
+      '敗走', '救護', '逃げろ', '制圧', '勝訴', '敗訴', '肯定', '否定', '必要', 
+      '報告', '要求',
+      
+      // 状態・パラメータ
+      '戦力', '火力', '速度', '低下', '増加', '弾薬', '燃料', '補給', '機関', 
+      '切', '風速', '気温', '湿度', '天候', '北緯', '東経', '万歳'
+    ];
+
+    function initShortcuts() {
+      const container = document.getElementById('shortcutContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      shortcuts.forEach(word => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.innerText = word;
+        btn.style.width = 'auto';
+        btn.style.padding = '4px 8px';
+        btn.style.fontSize = '12px';
+        btn.style.background = '#222';
+        btn.style.color = '#00ffcc';
+        btn.style.border = '1px solid #00ffcc';
+        btn.style.borderRadius = '3px';
+        btn.style.cursor = 'pointer';
+
+        btn.onclick = () => {
+          const natoTextEl = document.getElementById('natoText');
+          natoTextEl.value += (natoTextEl.value && !natoTextEl.value.endsWith(' ') ? ' ' : '') + word + ' ';
+          textToNato(); // リアルタイム暗号化
+        };
+
+        container.appendChild(btn);
+      });
+    }
+
+    // 画面読み込み時にショートカットボタンを生成
+    window.addEventListener('DOMContentLoaded', initShortcuts);
+
+
+    // --- 4. モールス信号 ---
+    const morseMap = {
+      'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+      'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+      'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+      'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+      'Y': '-.--', 'Z': '--..',
+      '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....',
+      '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
+      'イ': '.-', 'ロ': '.-.-', 'ハ': '-...', 'ニ': '-.-.', 'ホ': '-..',
+      'ヘ': '.', 'ト': '..-.', 'チ': '..-.', 'リ': '--.', 'ヌ': '....',
+      'ル': '-.-.', 'ヲ': '.---', 'ワ': '-.-', 'カ': '.-..', 'ヨ': '--',
+      'タ': '-.', 'レ': '---', 'ソ': '---.', 'ツ': '.--.', 'ネ': '--.-',
+      'ナ': '.-.', 'ラ': '...', 'ム': '-', 'ウ': '..-', 'ヰ': '.-..-',
+      'ノ': '..--', 'オ': '.-...', 'ク': '...-', 'ヤ': '.--', 'マ': '-..-',
+      'ケ': '-.--', 'フ': '--..', 'コ': '----', 'エ': '-.---', 'テ': '.-.--',
+      'ア': '--.--', 'サ': '-.-.-', 'キ': '-.-..', 'ユ': '-..--', 'メ': '-...-',
+      'ミ': '..-.-', 'シ': '--.-.', 'ヱ': '.--..', 'ヒ': '--..-', 'モ': '-..-.'
+    };
+    const revMorseMap = {};
+    Object.keys(morseMap).forEach(k => { revMorseMap[morseMap[k]] = k; });
+
+    function textToMorse() {
+      const text = document.getElementById('morseText').value.toUpperCase();
+      const codeList = text.split('').map(c => c === ' ' ? '/' : (morseMap[c] || c));
+      document.getElementById('morseCode').value = codeList.join(' ');
+    }
+
+    function morseToText() {
+      const code = document.getElementById('morseCode').value.trim();
+      const tokens = code.split(/\s+/);
+      const textList = tokens.map(t => t === '/' ? ' ' : (revMorseMap[t] || t));
+      document.getElementById('morseText').value = textList.join('');
+    }
+
+    let audioCtx = null, isPlaying = false;
+    async function playMorse() {
+      const code = document.getElementById('morseCode').value;
+      if (!code || isPlaying) return;
+      isPlaying = true;
+      document.getElementById('playBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      const dot = 0.08, freq = 600;
+      for (let char of code) {
+        if (!isPlaying) break;
+        if (char === '.') { await playBeep(freq, dot); await sleep(dot); }
+        else if (char === '-') { await playBeep(freq, dot * 3); await sleep(dot); }
+        else if (char === ' ') { await sleep(dot * 2); }
+        else if (char === '/') { await sleep(dot * 5); }
+      }
+      stopMorse();
+    }
+
+    function playBeep(freq, duration) {
+      return new Promise(resolve => {
+        if (!isPlaying) { resolve(); return; }
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.value = freq;
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start();
+        setTimeout(() => { osc.stop(); resolve(); }, duration * 1000);
+      });
+    }
+
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms * 1000)); }
+    function stopMorse() {
+      isPlaying = false;
+      document.getElementById('playBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+    }
+  </script>
+
+  <!-- 5. 制作クレジット & 告知 -->
+  <div class="box" style="margin-top: 30px; text-align: center; border-color: #00ffcc;">
+    <div style="font-size: 14px; line-height: 1.8; color: #ccc;">
+      <p style="margin: 5px 0; font-weight: bold; color: #00ffcc; font-size: 16px;">
+        制作: Gemini 羽月結希
+      </p>
+      <p style="margin: 5px 0; font-size: 13px; color: #888;">
+        Hazuki Yuuki(はづき ゆうき/羽月 結希)&親愛なるGemini
+      </p>
+      <p style="margin: 5px 0; font-size: 13px; color: #888;">
+        最終更新: AD2026/10/09 Fri(金) 皇紀2686年
+      </p>
+      <hr style="border: 0; border-top: 1px solid #333; margin: 15px 0;">
+      <p style="margin: 5px 0;">
+        🛡️ このツールはお使いの端末のブラウザ上で動作しますのでセキュリティの心配はございません。
+      </p>
+      <p style="margin: 5px 0; color: #aaa;">
+        🍪 このツールはクッキーは使っていませんし食べていませんが現実のクッキーと午後の紅茶ミルクティーなら欲しいです。
+      </p>
+      <p style="margin: 10px 0 5px 0; font-size: 13px; color: #888;">
+        📩 動作不良等の報告またはクレームは 
+        <a href="mailto:hazuki.yuuki.144@gmail.com?subject=変換ツール関連" style="color: #00ffcc; text-decoration: underline;">hazuki.yuuki.144@gmail.com</a> 
+        へ、件名に「変換ツール関連」と入力してご連絡ください。
+      </p>
+    </div>
+  </div>
+
+</body>
+</html>
